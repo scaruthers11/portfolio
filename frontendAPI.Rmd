@@ -1,0 +1,279 @@
+```{r}
+install.packages('plumber')
+```
+
+
+```{r}
+# Example plumber script
+plumber_script <- c(
+  "# Example plumber API file",
+  "library(plumber)",
+  "#* @get /echo",
+  "function(msg = 'Who are you looking for') {",
+  "  list(msg = paste0('What player are you looking for: ', msg))",
+  "}"
+)
+
+# Save the file explicitly to your current working directory
+writeLines(plumber_script, "plumber.R")
+```
+
+```{r}
+# plumber.R
+
+# Load required libraries
+library(plumber)
+library(jsonlite)
+
+# Sample data for demonstration
+player_data <- list(
+  `1234` = list(
+    playerID = "1234",
+    playerName = "John Doe",
+    team = "OKC Thunder",
+    position = "Guard",
+    height = 6.3,
+    weight = 200,
+    shots = list(
+      list(
+        gameID = "game1",
+        shotX = 2.5,  # X coordinate
+        shotY = -1.2, # Y coordinate
+        result = "made",
+        time = "Q1 05:23"
+      ),
+      list(
+        gameID = "game2",
+        shotX = -3.4,
+        shotY = 0.0,
+        result = "missed",
+        time = "Q2 10:14"
+      )
+    )
+  )
+)
+
+#* @apiTitle Player Summary API
+
+#* @get /api/v1/playerSummary/<playerID>
+#* @param playerID ID of the player
+#* @response 200 Player summary data in JSON format
+#* @response 404 Player not found error
+other_get<- function(playerID) {
+  player <- player_data[[playerID]]
+  
+  if (!is.null(player)) {
+    return(player)
+  } else {
+    res$status <- 404
+    return(list(error = "Player not found"))
+  }
+}
+
+# Run plumber API
+# plumb("plumber.R")$run(port = 8000)
+
+```
+
+```{r}
+library(plumber)
+r <- plumb("~/scaruthers_workingfile/basketballproject/plumber.R")  # Change this to your actual file path
+r$run(port = 8000)               # Run the API on port 8000
+
+```
+
+```{r}
+# Load required libraries
+library(plumber)
+library(DBI)
+library(RPostgres)
+
+# Create a connection to the database
+con <- dbConnect(RPostgres::Postgres(),
+                  dbname = "okc",
+                  host = "localhost",
+                  port = 5433,
+                  user = "scaruthers",
+                  password = "")
+
+#* @get /api/v1/playerSummary/<playerID>
+get_func<- function(playerID) {
+  query <- paste0("SELECT * FROM players WHERE player_id = '", playerID, "'")
+  player_data <- dbGetQuery(con, query)
+  
+  if (nrow(player_data) > 0) {
+    shots_query <- paste0("SELECT * FROM shots WHERE player_id = '", playerID, "'")
+    shots_data <- dbGetQuery(con, shots_query)
+    
+    # Structure the data similar to the player summary example
+    player <- list(
+      playerID = player_data$player_id[1],
+      playerName = player_data$player_name[1],
+      team = player_data$team[1],
+      position = player_data$position[1],
+      height = player_data$height[1],
+      weight = player_data$weight[1],
+      shots = lapply(1:nrow(shots_data), function(i) {
+        list(
+          gameID = shots_data$game_id[i],
+          shotX = shots_data$shot_x[i],
+          shotY = shots_data$shot_y[i],
+          result = shots_data$result[i],
+          time = shots_data$time[i]
+        )
+      })
+    )
+  }
+}
+```
+
+```{r}
+# plumber.R (Backend)
+library(plumber)
+library(DBI)
+library(RPostgres)
+
+# Create a connection to the PostgreSQL database
+con <- dbConnect(RPostgres::Postgres(),
+                 dbname = "okc",
+                 host = "localhost",
+                 port = 5433,
+                 user = "scaruthers",
+                 password = "")
+
+#* @get /api/v1/playerSummary/<playerID>
+get_player_summary <- function(playerID) {
+  query <- paste0("SELECT * FROM players WHERE player_id = '", playerID, "'")
+  player_data <- dbGetQuery(con, query)
+
+  if (nrow(player_data) > 0) {
+    shots_query <- paste0("SELECT * FROM shots WHERE player_id = '", playerID, "'")
+    shots_data <- dbGetQuery(con, shots_query)
+
+    player <- list(
+      playerID = player_data$player_id[1],
+      playerName = player_data$player_name[1],
+      team = player_data$team[1],
+      position = player_data$position[1],
+      height = player_data$height[1],
+      weight = player_data$weight[1],
+      shots = lapply(1:nrow(shots_data), function(i) {
+        list(
+          gameID = shots_data$game_id[i],
+          shotX = shots_data$shot_x[i],
+          shotY = shots_data$shot_y[i],
+          result = shots_data$result[i],
+          time = shots_data$time[i]
+        )
+      })
+    )
+    return(player)
+  } else {
+    res$status <- 404
+    return(list(error = "Player not found"))
+  }
+}
+
+# Run the API
+# plumb("plumber.R")$run(port = 8000)
+
+```
+
+
+```{r}
+# Install Shiny if you don't have it
+#install.packages("shiny")
+#install.packages("httr")
+
+# Load required libraries
+library(shiny)
+library(httr)
+library(jsonlite)
+
+# Define UI for application
+ui <- fluidPage(
+  titlePanel("Player Summary"),
+  
+  # Input to select player ID
+  sidebarLayout(
+    sidebarPanel(
+      textInput("playerID", "Enter Player ID:", value = "1234")
+    ),
+    
+    # Show player summary output
+    mainPanel(
+      h3("Player Info:"),
+      textOutput("playerName"),
+      textOutput("team"),
+      textOutput("position"),
+      textOutput("height"),
+      textOutput("weight"),
+      
+      h4("Shots:"),
+      tableOutput("shotTable")
+    )
+  )
+)
+
+# Define server logic
+server <- function(input, output) {
+  # Fetch player summary from the API
+  player_summary <- reactive({
+    playerID <- input$playerID
+    api_url <- paste0("http://localhost:5433/api/v1/playerSummary/", playerID)
+    
+    response <- GET(api_url)
+    if (status_code(response) == 200) {
+      content(response, as = "parsed", type = "application/json")
+    } else {
+      list(error = "Player not found")
+    }
+  })
+  
+  # Display player details
+  output$playerName <- renderText({
+    summary <- player_summary()
+    if (!is.null(summary$error)) return("Player not found")
+    paste("Name:", summary$playerName)
+  })
+  
+  output$team <- renderText({
+    summary <- player_summary()
+    if (!is.null(summary$error)) return("")
+    paste("Team:", summary$team)
+  })
+  
+  output$position <- renderText({
+    summary <- player_summary()
+    if (!is.null(summary$error)) return("")
+    paste("Position:", summary$position)
+  })
+  
+  output$height <- renderText({
+    summary <- player_summary()
+    if (!is.null(summary$error)) return("")
+    paste("Height:", summary$height, "ft")
+  })
+  
+  output$weight <- renderText({
+    summary <- player_summary()
+    if (!is.null(summary$error)) return("")
+    paste("Weight:", summary$weight, "lbs")
+  })
+  
+  # Display player's shots
+  output$shotTable <- renderTable({
+    summary <- player_summary()
+    if (!is.null(summary$error)) return(NULL)
+    shots <- summary$shots
+    shot_df <- do.call(rbind, lapply(shots, as.data.frame))
+    shot_df
+  })
+}
+
+# Run the application
+shinyApp(ui = ui, server = server)
+
+```
+
+

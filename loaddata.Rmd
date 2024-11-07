@@ -1,0 +1,229 @@
+```{r}
+library(jsonlite)
+library(DBI)
+library(RPostgres)
+
+# Load JSON files
+games_data <- fromJSON("games.json")
+teams_data <- fromJSON("teams.json")
+players_data <- fromJSON("players.json")
+
+# Connect to PostgreSQL
+conn <- dbConnect(RPostgres::Postgres(), dbname = "okc", host = "localhost", port = 5433, user = "okcapplicant", password = "your_password")
+
+# Normalize the data
+# Assuming games_data has homeTeam and awayTeam IDs, and players_data has team references
+
+# Write teams to teams table
+teams_df <- data.frame(teams_data)
+dbWriteTable(conn, "teams", teams_df, overwrite = TRUE, row.names = FALSE)
+
+# Write players to players table, with team reference
+players_df <- data.frame(players_data)
+dbWriteTable(conn, "players", players_df, overwrite = TRUE, row.names = FALSE)
+
+```
+
+```{r}
+head(games_df$homeTeam$players)
+
+
+```
+
+
+```{r}
+# Write games to games table, ensuring foreign key relationships
+games_df <- data.frame(games_data)
+# Flatten the homeTeam and awayTeam columns
+# Check the structure of homeTeam and awayTeam
+head(games_df$homeTeam$players$shots)
+head(games_df$awayTeam)
+
+# See a sample of homeTeam and awayTeam
+
+
+# Extract teamID while handling both lists and atomic values
+games_df$home_team_id <- sapply(games_df$homeTeam, function(x) {
+  if (is.list(x)) {
+    return(x[["teamID"]])  # If it's a list, extract teamID
+  } else {
+    return(x)  # If it's already atomic, return it directly
+  }
+})
+games_df$away_team_id <- sapply(games_df$awayTeam, function(x) {
+  if (is.list(x)) {
+    return(x[["teamID"]])  # If it's a list, extract teamID
+  } else {
+    return(x)  # If it's already atomic, return it directly
+  }
+})
+#games_df$away_team_id <- sapply(games_df$awayTeam, function(x) x$teamID)
+
+# Convert the game date to a proper date format
+games_df$game_date <- as.Date(games_df$date)
+
+# Check the structure to ensure the correct columns are created
+str(games_df)
+
+# Create teams table
+dbSendQuery(conn, "
+  CREATE TABLE IF NOT EXISTS teams (
+    id INT PRIMARY KEY,          -- Existing teamID as the primary key
+    team_name TEXT NOT NULL,
+    team_location TEXT
+  )
+")
+
+
+# Write the teams data to the teams table
+dbWriteTable(conn, "teams", teams_df, overwrite = TRUE, row.names = FALSE)
+
+# Write the games data to the games table
+#dbWriteTable(conn, "games", games_df, overwrite = TRUE, row.names = FALSE)
+
+
+dbDisconnect(conn)
+
+```
+
+
+
+
+```{r}
+dbGetQuery(conn, "SELECT p.player_name, t.team_name, g.game_date
+FROM players p
+JOIN teams t ON p.team_id = t.team_id
+JOIN games g ON g.home_team_id = t.team_id
+WHERE p.player_id = 1;
+")
+dbGetQuery(conn, "SELECT player_data->>'name' AS player_name, player_data->>'position' AS position
+FROM players
+WHERE player_data->>'id' = '123';
+")
+```
+
+
+```{r}
+ # Extract homeTeam and awayTeam details from games_df
+home_teams <- games_df$homeTeam
+away_teams <- games_df$awayTeam
+
+# Flatten the players data from homeTeam
+home_players <- do.call(rbind, lapply(games_df$homeTeam$players, function(x) as.data.frame(x)))
+
+# If awayTeam has players (optional, if it exists)
+# away_players <- do.call(rbind, lapply(games_df$awayTeam$players, function(x) as.data.frame(x)))
+
+```
+
+```{r}
+conn <- dbConnect(RPostgres::Postgres(), dbname = "okc", host = "localhost", port = 5433, user = "okcapplicant", password = "your_password")
+
+dbSendQuery(conn, "
+  CREATE TABLE IF NOT EXISTS teams (
+    teamID INT PRIMARY KEY,       -- teamID as primary key
+    team_name TEXT NOT NULL
+  )
+")
+
+# Write team data to PostgreSQL
+#teams_df <- unique(rbind(home_teams, away_teams))  # Merge and remove duplicates
+# Exclude players column from teams_df
+teams_df <- home_teams[, !(colnames(home_teams) %in% "players")]
+teams_df <- as.data.frame(teams_df)
+home_players <- as.data.frame(home_players)
+# Convert lists in the shots column to comma-separated strings
+home_players$shots <- sapply(home_players$shots, function(x) {
+  if (is.list(x)) {
+    paste(unlist(x), collapse = ", ")  # Convert list to comma-separated string
+  } else {
+    return(x)
+  }
+})
+
+# Now write the teams_df to the database without the players column
+dbWriteTable(conn, "teams", teams_df, overwrite = TRUE, row.names = FALSE)
+
+# Prepare and write players data
+# Write players data to PostgreSQL
+dbWriteTable(conn, "homeplayers", home_players, overwrite = TRUE, row.names = FALSE)
+
+
+# Add team IDs from home and away teams to the games table
+games_df$home_team_id <- sapply(games_df$home_team_id, function(x){
+  if (is.list(x)){
+    paste(unlist(x), collapse = ", ")
+  } else {
+    return(x)
+  }
+})
+
+games_df$away_team_id <- sapply(games_df$away_team_id, function(x){
+  if (is.list(x)){
+    paste(unlist(x), collapse = ", ")
+  } else {
+    return(x)
+  }
+})
+
+# Remove the nested structures from games_df now that we extracted the necessary IDs
+games_df$homeTeam <- NULL
+games_df$awayTeam <- NULL
+
+# Write the games table to the database, referencing the teams
+dbWriteTable(conn, "games", games_df, overwrite = TRUE, row.names = FALSE)
+
+```
+```{r}
+dbGetQuery(conn, "SELECT * FROM homeplayers")
+#dbGetQuery(conn, "SELECT * FROM games")
+dbGetQuery(conn, "SELECT * FROM teams")
+# Check what is being assigned to home_team_id
+str(games_df$home_team_id)
+#head(games_df$home_team_id)
+
+```
+```{r}
+# Flatten homeTeam and awayTeam
+home_teams_df <- games_df$homeTeam  # Assuming this is already done
+away_teams_df <- games_df$awayTeam
+
+# Remove the nested players and shots columns from both home_teams_df and away_teams_df
+home_teams_df$players <- NULL
+home_teams_df$shots <- NULL
+away_teams_df$players <- NULL
+away_teams_df$shots <- NULL
+
+# Write home and away teams to the database
+dbWriteTable(conn, "hometeams", home_teams_df, append = TRUE, row.names = FALSE)
+dbWriteTable(conn, "awayteams", away_teams_df, append = TRUE, row.names = FALSE)
+
+# Add team IDs from home and away teams to the games table
+games_df$home_team_id <- sapply(games_df$homeTeam, function(x){
+  if (is.list(x)){
+    paste(unlist(x), collapse = ", ")
+  } else {
+    return(x)
+  }
+})
+
+games_df$away_team_id <- sapply(games_df$awayTeam, function(x){
+  if (is.list(x)){
+    paste(unlist(x), collapse = ", ")
+  } else {
+    return(x)
+  }
+})
+
+# Remove the nested structures from games_df now that we extracted the necessary IDs
+games_df$homeTeam <- NULL
+games_df$awayTeam <- NULL
+
+# Write the games table to the database, referencing the teams
+dbWriteTable(conn, "games", games_df, overwrite = TRUE, row.names = FALSE)
+
+
+
+```
+
+

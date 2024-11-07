@@ -1,0 +1,195 @@
+```{r}
+install.packages(c("jsonlite", "DBI", "RPostgres"))
+```
+```{r}
+library(jsonlite)
+library(DBI)
+library(RPostgres)
+```
+
+
+```{r}
+# Assuming the JSON files are in the same directory as your R script
+games_data <- fromJSON("games.json")
+teams_data <- fromJSON("teams.json")
+players_data <- fromJSON("players.json")
+
+# Convert JSON data to data frames
+df1 <- data.frame(games_data)
+df2 <- data.frame(teams_data)
+df3 <- data.frame(players_data)
+```
+
+```{r}
+# Replace with your table creation SQL statements
+#dbSendQuery(conn, "CREATE TABLE IF NOT EXISTS table1 (id INTEGER, date INTEGER, hometeam)")
+#dbSendQuery(conn, "CREATE TABLE IF NOT EXISTS table3 (column5 TEXT, column6 INTEGER, ...)")
+
+
+dbSendQuery(conn, "CREATE TABLE IF NOT EXISTS table1 (id INTEGER, date INTEGER)")
+dbSendQuery(conn, "CREATE TABLE IF NOT EXISTS table2 (column3 TEXT, column4 INTEGER)")
+dbSendQuery(conn, "CREATE TABLE IF NOT EXISTS table3 (column5 TEXT, column6 INTEGER)")
+```
+```{r}
+# Function to serialize nested lists or data frames into JSON strings
+convert_nested_to_json <- function(data) {
+  for (col in colnames(data)) {
+    # Check if the column is a list or data frame (which may indicate nested structure)
+    if (is.list(data[[col]])) {
+      # Convert the list to JSON format
+      data[[col]] <- sapply(data[[col]], function(x) toJSON(x, auto_unbox = TRUE))
+    }
+  }
+  return(data)
+}
+
+# Load and flatten JSON data
+load_and_flatten_json <- function(json_file_path) {
+  json_data <- fromJSON(json_file_path, flatten = TRUE)
+  
+  # Ensure that the JSON data is a data frame
+  if (is.list(json_data) && !is.data.frame(json_data)) {
+    json_data <- as.data.frame(json_data, stringsAsFactors = FALSE)
+  }
+  
+  # Convert nested columns (lists, etc.) to JSON strings
+  json_data <- convert_nested_to_json(json_data)
+  
+  return(json_data)
+}
+
+# Load and flatten data from three JSON files
+json_teams <- "teams.json"
+json_players <- "players.json"
+json_games <- "games.json"
+
+data1 <- load_and_flatten_json(json_teams)
+data2 <- load_and_flatten_json(json_players)
+data3 <- load_and_flatten_json(json_games)
+
+```
+
+```{r}
+# Write the flattened data frames to the database
+dbWriteTable(conn, "table1", data1, overwrite = TRUE, row.names = FALSE)
+dbWriteTable(conn, "table2", data2, overwrite = TRUE, row.names = FALSE)
+dbWriteTable(conn, "table3", data3, overwrite = TRUE, row.names = FALSE)
+
+```
+
+```{r}
+dbGetInfo(conn, "SELECT * FROM table1")
+dbGetQuery(conn, "SELECT * FROM table1")
+dbGetQuery(conn, "SELECT * FROM table2")
+#dbGetQuery(conn, "SELECT homeTeam.id FROM table3.homeTeam")
+
+dbGetQuery(conn, "SELECT homeTeam.id IN homeTeam FROM table3")
+```
+
+
+```{r}
+dbGetQuery(conn, "SELECT * FROM table3")
+player_query <- paste0("SELECT player_id, player_name, team, position, height, weight FROM players WHERE player_id = 1'", "'")
+#dbGetQuery(con, "SELECT player_id, player_name, team, position, height, weight FROM players WHERE player_id = 1")
+dbGetQuery(conn, "SELECT id, name FROM table2")
+
+
+#dbGetQuery(conn, "SELECT id, hometeam.id FROM table3")
+
+head(table3)
+
+head(table3[, ,homeTeam[,id[,]]])
+```
+
+
+```{r}
+# Export the PostgreSQL database using pg_dump
+#system("pg_dump -U okcapplicant okc > dbexport.pgsql")
+#system("pg_dump -U okcapplicant okc > #/Users/scaruthers/Documents/nba-autocomplete/backend/scripts/dbexport.pgsql")
+system("pg_dump -U okcapplicant -h localhost -p 5433 okc --exclude-table=public.nested_table --exclude-table=public.table1 --exclude-table=public.table2 --exclude-table=public.table3 > backend/scripts/dbexport.pgsql
+")
+
+#PGPASSWORD="thunder" pg_dump -U okcapplicant okc > backend/scripts/dbexport.pgsql
+
+
+```
+
+
+```{r}
+# Load the required libraries
+library(plumber)
+library(DBI)
+library(RPostgres)
+
+# Create a connection to the database
+get_db_connection <- function() {
+  con <- dbConnect(RPostgres::Postgres(),
+                   dbname = "okc",        # Database name
+                   host = "localhost",    # Host name or IP
+                   port = 5433,           # PostgreSQL port (change if needed)
+                   user = "okcapplicant", # Database user
+                   password = "thunder") # Update the password
+  return(con)
+}
+
+#* @apiTitle Player Summary API
+
+#* @get /api/v1/playerSummary/<playerID>
+#* @param playerID ID of the player
+#* @response 200 Player summary data in JSON format
+#* @response 404 Player not found error
+function(playerID) {
+  con <- get_db_connection()
+  
+  # Query to fetch player data
+  player_query <- paste0("SELECT player_id, player_name, team, position, height, weight FROM players WHERE player_id = '", playerID, "'")
+  player_data <- dbGetQuery(con, player_query)
+  
+  # If player not found, return 404 error
+  if (nrow(player_data) == 0) {
+    return(list(error = "Player not found"), 404)
+  }
+  
+  # Query to fetch player's shots
+  shots_query <- paste0("SELECT game_id, shot_x, shot_y, result, time FROM shots WHERE player_id = '", playerID, "'")
+  shots_data <- dbGetQuery(con, shots_query)
+  
+  # Structure the response similar to the sample_response.json format
+  player_summary_response <- list(
+    playerID = player_data$player_id[1],
+    playerName = player_data$player_name[1],
+    team = player_data$team[1],
+    position = player_data$position[1],
+    height = player_data$height[1],
+    weight = player_data$weight[1],
+    shots = lapply(1:nrow(shots_data), function(i) {
+      list(
+        gameID = shots_data$game_id[i],
+        shotX = shots_data$shot_x[i],
+        shotY = shots_data$shot_y[i],
+        result = shots_data$result[i],
+        time = shots_data$time[i]
+      )
+    })
+  )
+  
+  # Close the database connection
+  dbDisconnect(con)
+  
+  # Return the response as JSON
+  return(player_summary_response)
+}
+
+# Save this script as `plumber.R` in your working directory
+```
+```{r}
+# Load the plumber library
+library(plumber)
+
+# Load the API file and run the API
+r <- plumb("plumber.R")  # Assuming your plumber script is saved as plumber.R
+r$run(port = 8000)
+
+```
+
+
