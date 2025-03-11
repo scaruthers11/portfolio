@@ -1,0 +1,555 @@
+---
+title: "chatFTW"
+output: html_document
+--- 
+```{r}
+# -------------------------------
+# 1. Load Required Libraries
+# -------------------------------
+library(tidyverse)     # Data manipulation & visualization
+library(caret)         # Data splitting & evaluation
+library(xgboost)       # Boosting (XGBoost)
+library(MASS)          # LDA and QDA
+library(class)         # KNN classification
+library(FNN)           # KNN regression (knn.reg)
+library(mgcv)          # Generalized Additive Models (GAM)
+library(rpart)         # Decision Trees
+library(rpart.plot)    # Plotting decision trees
+library(randomForest)  # Random Forests
+library(ipred)         # Bagging
+library(gbm)           # Boosting (alternative)
+library(glmnet)        # Ridge and Lasso Regression
+
+library(arrow)
+```
+
+```{r}
+data <- read_csv_arrow("AIdata.csv")
+
+# -------------------------------
+# 2. Data Preprocessing
+# -------------------------------
+# (Assume your data frame is named 'data' and contains PlayResult, ExitSpeed, Angle, BatterSide, etc.)
+data <- data %>%
+  mutate(
+    SLGValue = case_when(
+      PlayResult %in% c("Out") ~ 0,
+      PlayResult == "Single" ~ 1,
+      PlayResult == "Double" ~ 2,
+      PlayResult == "Triple" ~ 3,
+      PlayResult == "HomeRun" ~ 4,
+      TRUE ~ NA_real_
+    ),
+    ExitSpeed = round(as.numeric(as.character(ExitSpeed)), 1),
+    Angle = round(as.numeric(as.character(Angle)), 1)
+  ) %>%
+  na.omit()
+
+# Create a binary outcome for classification tasks: Hit (SLGValue > 0) vs. NoHit
+data <- data %>%
+  mutate(Hit = ifelse(SLGValue > 0, "Hit", "NoHit"))
+
+# (Optional) Print table of BatterSide
+print(table(data$BatterSide))
+```
+# fair cross validation
+
+```{r}
+library(caret)
+library(xgboost)
+library(randomForest)
+library(rpart)
+
+# Set a reproducible seed
+set.seed(42)
+
+# For regression (assuming SLGValue is numeric), no need for classProbs
+train_control <- trainControl(
+  method = "cv",
+  number = 5,
+  savePredictions = "final"
+)
+
+# 1. Train a decision tree using ExitSpeed and LaunchAngle as predictors
+model_dt <- train(
+  SLGValue ~ ExitSpeed + Angle,
+  data = data,
+  method = "rpart",
+  trControl = train_control
+)
+
+# 2. Train a random forest model
+model_rf <- train(
+  SLGValue ~ ExitSpeed + Angle,
+  data = data,
+  method = "rf",
+  trControl = train_control
+)
+
+# 3. Train an XGBoost model
+model_xgb <- train(
+  SLGValue ~ ExitSpeed + Angle,
+  data = data,
+  method = "xgbTree",
+  trControl = train_control
+)
+
+# 4. Train a bagged tree model
+model_bag <- train(
+  SLGValue ~ ExitSpeed + Angle,
+  data = data,
+  method = "treebag",
+  trControl = train_control
+)
+
+AQ 
+```
+
+
+```{r}
+library(caret)
+library(xgboost)
+library(randomForest)
+library(rpart)
+
+# Suppose you have a data frame 'df' with predictors and a target column 'y'
+set.seed(42)
+train_control <- trainControl(
+  method = "cv",
+  number = 5,
+  savePredictions = "final",
+  classProbs = TRUE
+)
+
+# 1. Train a decision tree
+model_dt <- train(
+  SLGValue ~ , data = data,
+  method = "rpart",
+  trControl = train_control
+)
+
+# 2. Train a random forest
+model_rf <- train(
+  SLGValue ~ ., data = data,
+  method = "rf",
+  trControl = train_control
+)
+
+# 3. Train a gradient boosting model (xgboost)
+# (You may need to specify tuneGrid for xgb)
+model_xgb <- train(
+  SLGValue ~ ., data = data,
+  method = "xgbTree",
+  trControl = train_control
+)
+
+# 4. Train a bagged model
+model_bag <- train(
+  SLGValue ~ ., data = data,
+  method = "treebag",
+  trControl = train_control
+)
+
+# Compare results
+model_dt$results
+model_rf$results
+model_xgb$results
+model_bag$results
+
+```
+
+```{r}
+# -------------------------------
+# 3. Split Data into Training and Testing Sets
+# -------------------------------
+# For demonstration, we use only left-handed batters.
+data_L <- data %>% filter(BatterSide == "Left")
+
+set.seed(123)
+trainIndex <- createDataPartition(data_L$SLGValue, p = 0.8, list = FALSE)
+trainData <- data_L[trainIndex, ]
+testData  <- data_L[-trainIndex, ]
+
+```
+
+
+```{r}
+# -------------------------------
+# 4. Regression Models
+# -------------------------------
+
+### 4.1 Linear Regression (Simple & Multiple)
+# Multiple Linear Regression (using ExitSpeed and Angle)
+lm_model <- lm(SLGValue ~ ExitSpeed + Angle, data = trainData)
+summary(lm_model)
+testData$lm_pred <- predict(lm_model, testData)
+lm_rmse <- sqrt(mean((testData$SLGValue - testData$lm_pred)^2))
+print(paste("Linear Regression RMSE:", round(lm_rmse, 3)))
+
+# (For simple regression, you could use a single predictor, e.g.:)
+lm_simple <- lm(SLGValue ~ ExitSpeed, data = trainData)
+summary(lm_simple)
+
+### 4.2 Generalized Additive Model (GAM) for Regression
+gam_model <- gam(SLGValue ~ s(ExitSpeed) + s(Angle), data = trainData)
+summary(gam_model)
+testData$gam_pred <- predict(gam_model, testData)
+gam_rmse <- sqrt(mean((testData$SLGValue - testData$gam_pred)^2))
+print(paste("GAM Regression RMSE:", round(gam_rmse, 3)))
+
+### 4.3 Decision Tree for Regression
+tree_model_reg <- rpart(SLGValue ~ ExitSpeed + Angle, data = trainData, method = "anova")
+rpart.plot(tree_model_reg)
+testData$tree_reg_pred <- predict(tree_model_reg, testData)
+tree_reg_rmse <- sqrt(mean((testData$SLGValue - testData$tree_reg_pred)^2))
+print(paste("Decision Tree Regression RMSE:", round(tree_reg_rmse, 3)))
+
+### 4.4 Bagging for Regression
+bagging_model <- bagging(SLGValue ~ ExitSpeed + Angle, data = trainData, nbagg = 25)
+testData$bagging_pred <- predict(bagging_model, testData)
+bagging_rmse <- sqrt(mean((testData$SLGValue - testData$bagging_pred)^2))
+print(paste("Bagging Regression RMSE:", round(bagging_rmse, 3)))
+
+### 4.5 Random Forest for Regression
+rf_model_reg <- randomForest(SLGValue ~ ExitSpeed + Angle, data = trainData, ntree = 100)
+testData$rf_reg_pred <- predict(rf_model_reg, testData)
+rf_reg_rmse <- sqrt(mean((testData$SLGValue - testData$rf_reg_pred)^2))
+print(paste("Random Forest Regression RMSE:", round(rf_reg_rmse, 3)))
+
+### 4.6 Boosting (XGBoost) for Regression
+# Prepare data for xgboost
+dtrain <- xgb.DMatrix(
+  data = as.matrix(trainData[, c("ExitSpeed", "Angle")]),
+  label = trainData$SLGValue
+)
+dtest <- xgb.DMatrix(
+  data = as.matrix(testData[, c("ExitSpeed", "Angle")]),
+  label = testData$SLGValue
+)
+
+params <- list(
+  objective = "reg:squarederror",
+  eval_metric = "rmse",
+  max_depth = 6,
+  eta = 0.1,
+  subsample = 0.8,
+  colsample_bytree = 0.8
+)
+
+model_xgb <- xgb.train(
+  params = params,
+  data = dtrain,
+  nrounds = 100,
+  watchlist = list(train = dtrain, test = dtest),
+  verbose = 0
+)
+
+testData$xgb_pred <- predict(model_xgb, dtest)
+xgb_rmse <- sqrt(mean((testData$SLGValue - testData$xgb_pred)^2))
+print(paste("XGBoost Regression RMSE:", round(xgb_rmse, 3)))
+
+### 4.7 Ridge Regression
+# Prepare matrices for glmnet
+x_train <- as.matrix(trainData[, c("ExitSpeed", "Angle")])
+y_train <- trainData$SLGValue
+x_test  <- as.matrix(testData[, c("ExitSpeed", "Angle")])
+# alpha = 0 for ridge regression
+ridge_model <- cv.glmnet(x_train, y_train, alpha = 0)
+best_lambda_ridge <- ridge_model$lambda.min
+ridge_pred <- predict(ridge_model, s = best_lambda_ridge, newx = x_test)
+ridge_rmse <- sqrt(mean((testData$SLGValue - ridge_pred)^2))
+print(paste("Ridge Regression RMSE:", round(ridge_rmse, 3)))
+
+### 4.8 Lasso Regression
+# alpha = 1 for lasso regression
+lasso_model <- cv.glmnet(x_train, y_train, alpha = 1)
+best_lambda_lasso <- lasso_model$lambda.min
+lasso_pred <- predict(lasso_model, s = best_lambda_lasso, newx = x_test)
+lasso_rmse <- sqrt(mean((testData$SLGValue - lasso_pred)^2))
+print(paste("Lasso Regression RMSE:", round(lasso_rmse, 3)))
+
+# -------------------------------
+# 5. Classification Models (Predicting Hit vs. NoHit)
+# -------------------------------
+```
+
+
+# Classification stuff 
+
+```{r}
+# -------------------------------
+# Data Preprocessing: Create a Binary Response
+# -------------------------------
+data <- data %>%
+  mutate(
+    SLGValue = case_when(
+      PlayResult %in% c("Out") ~ 0,
+      PlayResult == "Single" ~ 1,
+      PlayResult == "Double" ~ 2,
+      PlayResult == "Triple" ~ 3,
+      PlayResult == "HomeRun" ~ 4,
+      TRUE ~ NA_real_
+    ),
+    ExitSpeed = round(as.numeric(as.character(ExitSpeed)), 1),
+    Angle = round(as.numeric(as.character(Angle)), 1),
+    # Create a binary indicator for Hit (1) vs. NoHit (0)
+    Hit = ifelse(SLGValue > 0, "Hit", "NoHit")
+  ) %>%
+  na.omit()
+
+# Convert Hit to a factor with two levels
+data$Hit <- factor(data$Hit, levels = c("NoHit", "Hit"))
+
+# -------------------------------
+# Split the data (example using left-handed batters)
+# -------------------------------
+data_L <- data %>% filter(BatterSide == "Left")
+set.seed(123)
+trainIndex <- createDataPartition(data_L$SLGValue, p = 0.8, list = FALSE)
+trainData <- data_L[trainIndex, ]
+testData  <- data_L[-trainIndex, ]
+
+# Also ensure that the train/test splits have the response as a factor
+trainData$Hit <- factor(trainData$Hit, levels = c("NoHit", "Hit"))
+testData$Hit  <- factor(testData$Hit, levels = c("NoHit", "Hit"))
+
+# -------------------------------
+# Fit the Logistic Regression Model
+# -------------------------------
+glm_model <- glm(Hit ~ ExitSpeed + Angle, data = trainData, family = binomial)
+summary(glm_model)
+
+```
+
+
+```{r}
+### 5.1 Logistic Regression
+glm_model <- glm(Hit ~ ExitSpeed + Angle, data = trainData, family = binomial)
+summary(glm_model)
+testData$glm_prob <- predict(glm_model, testData, type = "response")
+testData$glm_pred <- ifelse(testData$glm_prob > 0.5, "Hit", "NoHit")
+confusionMatrix(as.factor(testData$glm_pred), as.factor(testData$Hit))
+
+### 5.2 Linear Discriminant Analysis (LDA)
+lda_model <- lda(Hit ~ ExitSpeed + Angle, data = trainData)
+lda_pred <- predict(lda_model, testData)
+confusionMatrix(lda_pred$class, testData$Hit)
+
+### 5.3 Quadratic Discriminant Analysis (QDA)
+qda_model <- qda(Hit ~ ExitSpeed + Angle, data = trainData)
+qda_pred <- predict(qda_model, testData)
+confusionMatrix(qda_pred$class, testData$Hit)
+
+### 5.4 K-Nearest Neighbors (KNN) Classification
+# Prepare predictors
+train_knn <- trainData %>% dplyr::select(ExitSpeed, Angle)
+test_knn  <- testData %>% dplyr::select(ExitSpeed, Angle)
+train_labels <- trainData$Hit
+# Use k = 5 (you can tune this parameter)
+knn_pred <- knn(train = train_knn, test = test_knn, cl = train_labels, k = 5)
+confusionMatrix(knn_pred, testData$Hit)
+
+### 5.5 GAM for Classification
+gam_model_class <- gam(Hit ~ s(ExitSpeed) + s(Angle), data = trainData, family = binomial)
+testData$gam_prob <- predict(gam_model_class, testData, type = "response")
+testData$gam_pred_class <- ifelse(testData$gam_prob > 0.5, "Hit", "NoHit")
+confusionMatrix(as.factor(testData$gam_pred_class), as.factor(testData$Hit))
+
+### 5.6 Decision Tree for Classification
+tree_model_class <- rpart(Hit ~ ExitSpeed + Angle, data = trainData, method = "class")
+rpart.plot(tree_model_class)
+testData$tree_class_pred <- predict(tree_model_class, testData, type = "class")
+confusionMatrix(testData$tree_class_pred, testData$Hit)
+
+### 5.7 Bagging for Classification
+bagging_model_class <- bagging(Hit ~ ExitSpeed + Angle, data = trainData, nbagg = 25)
+testData$bagging_class_pred <- predict(bagging_model_class, testData, type = "class")
+confusionMatrix(testData$bagging_class_pred, testData$Hit)
+
+### 5.8 Random Forest for Classification
+rf_model_class <- randomForest(Hit ~ ExitSpeed + Angle, data = trainData, ntree = 100)
+testData$rf_class_pred <- predict(rf_model_class, testData)
+confusionMatrix(testData$rf_class_pred, testData$Hit)
+
+### 5.9 Boosting (XGBoost) for Classification
+# Prepare data: convert Hit to numeric (1 = Hit, 0 = NoHit)
+dtrain_class <- xgb.DMatrix(
+  data = as.matrix(trainData[, c("ExitSpeed", "Angle")]),
+  label = ifelse(trainData$Hit == "Hit", 1, 0)
+)
+dtest_class <- xgb.DMatrix(
+  data = as.matrix(testData[, c("ExitSpeed", "Angle")]),
+  label = ifelse(testData$Hit == "Hit", 1, 0)
+)
+
+params_class <- list(
+  objective = "binary:logistic",
+  eval_metric = "error",
+  max_depth = 6,
+  eta = 0.1,
+  subsample = 0.8,
+  colsample_bytree = 0.8
+)
+
+model_xgb_class <- xgb.train(
+  params = params_class,
+  data = dtrain_class,
+  nrounds = 100,
+  watchlist = list(train = dtrain_class, test = dtest_class),
+  verbose = 0
+)
+
+testData$xgb_class_prob <- predict(model_xgb_class, dtest_class)
+testData$xgb_class_pred <- ifelse(testData$xgb_class_prob > 0.5, "Hit", "NoHit")
+confusionMatrix(as.factor(testData$xgb_class_pred), as.factor(testData$Hit))
+```
+
+```{r}
+# comparison of models 
+
+# Create a data frame with model performance based on the provided output:
+performance_df <- data.frame(
+  Model = c("Logistic Regression", "LDA", "QDA", "KNN", "GAM", 
+            "Decision Tree", "Bagging", "Random Forest", "XGBoost"),
+  Accuracy = c(0.6582, 0.6553, 0.6986, 0.7271, 0.7320, 0.7324, 0.7178, 0.7399, 0.7279),
+  Kappa = c(0.2590, 0.2487, 0.3923, 0.4306, 0.4450, 0.4444, 0.4121, 0.4573, 0.4272),
+  Sensitivity = c(0.8113, 0.8195, 0.6862, 0.7868, 0.7740, 0.7804, 0.7752, 0.7971, 0.8065),
+  Specificity = c(0.4360, 0.4167, 0.7166, 0.6405, 0.6710, 0.6627, 0.6344, 0.6568, 0.6138)
+)
+
+# Sort the models by Accuracy (highest first)
+performance_df <- performance_df[order(-performance_df$Accuracy), ]
+
+# Print the summary table
+print(performance_df)
+
+# Optionally, if you have knitr installed, you can render a nicer table:
+if(require(knitr)){
+  knitr::kable(performance_df, digits = 4, 
+               caption = "Comparison of Classification Models")
+}
+
+# Visualize the model accuracies with a bar plot:
+library(ggplot2)
+ggplot(performance_df, aes(x = reorder(Model, Accuracy), y = Accuracy)) +
+  geom_bar(stat = "identity", fill = "lightblue") +
+  coord_flip() +
+  labs(title = "Model Accuracy Comparison",
+       x = "Model", 
+       y = "Accuracy")
+
+```
+
+
+
+```{r}
+# -------------------------------
+# 6. Unsupervised Methods
+# -------------------------------
+
+### 6.1 K-means Clustering
+set.seed(123)
+# Scale predictors for clustering
+kmeans_result <- kmeans(scale(data_L[, c("ExitSpeed", "Angle")]), centers = 3, nstart = 25)
+# Add cluster labels to data
+data_L$cluster <- as.factor(kmeans_result$cluster)
+print(table(data_L$cluster))
+```
+
+```{r}
+### 6.2 Hierarchical Clustering
+d <- dist(scale(data_L[, c("ExitSpeed", "Angle")]))
+hc <- hclust(d, method = "complete")
+plot(hc, labels = data_L$BatterSide, main = "Hierarchical Clustering Dendrogram")
+# Optionally, cut the tree to form 3 clusters:
+clusters_hc <- cutree(hc, k = 3)
+print(table(clusters_hc))
+```
+
+```{r}
+### 6.3 Principal Component Analysis (PCA)
+pca_res <- prcomp(data_L[, c("ExitSpeed", "Angle")], scale. = TRUE)
+summary(pca_res)
+biplot(pca_res)
+
+```
+
+```{r}
+# --------------------------------------------
+# Compare Model Performance for Regression
+# --------------------------------------------
+# (Assuming you already computed these RMSE values for the test set)
+# lm_rmse, gam_rmse, tree_reg_rmse, bagging_rmse, rf_reg_rmse, xgb_rmse, ridge_rmse, lasso_rmse
+
+regression_results <- data.frame(
+  Model = c("Linear Regression", "GAM Regression", "Decision Tree", 
+            "Bagging", "Random Forest", "XGBoost", "Ridge Regression", "Lasso Regression"),
+  RMSE = c(lm_rmse, gam_rmse, tree_reg_rmse, bagging_rmse, 
+           rf_reg_rmse, xgb_rmse, ridge_rmse, lasso_rmse)
+)
+
+# Order the results by RMSE (ascending: lower is better)
+regression_results <- regression_results[order(regression_results$RMSE), ]
+print("Regression Models Performance (sorted by RMSE):")
+print(regression_results)
+
+# --------------------------------------------
+# Compare Model Performance for Classification
+# --------------------------------------------
+# (For classification, we assume you already predicted class labels for the test set)
+# Here we re-calculate the confusion matrices and extract the Accuracy metric.
+
+library(caret)  # ensure caret is loaded for confusionMatrix
+
+# Logistic Regression:
+cm_glm <- confusionMatrix(as.factor(testData$glm_pred), as.factor(testData$Hit))
+acc_glm <- cm_glm$overall['Accuracy']
+
+# LDA:
+cm_lda <- confusionMatrix(lda_pred$class, testData$Hit)
+acc_lda <- cm_lda$overall['Accuracy']
+
+# QDA:
+cm_qda <- confusionMatrix(qda_pred$class, testData$Hit)
+acc_qda <- cm_qda$overall['Accuracy']
+
+# K-Nearest Neighbors:
+cm_knn <- confusionMatrix(knn_pred, testData$Hit)
+acc_knn <- cm_knn$overall['Accuracy']
+
+# GAM for Classification:
+cm_gam_class <- confusionMatrix(as.factor(testData$gam_pred_class), as.factor(testData$Hit))
+acc_gam_class <- cm_gam_class$overall['Accuracy']
+
+# Decision Tree for Classification:
+cm_tree_class <- confusionMatrix(testData$tree_class_pred, testData$Hit)
+acc_tree_class <- cm_tree_class$overall['Accuracy']
+
+# Bagging for Classification:
+cm_bagging_class <- confusionMatrix(testData$bagging_class_pred, testData$Hit)
+acc_bagging_class <- cm_bagging_class$overall['Accuracy']
+
+# Random Forest for Classification:
+cm_rf_class <- confusionMatrix(testData$rf_class_pred, testData$Hit)
+acc_rf_class <- cm_rf_class$overall['Accuracy']
+
+# XGBoost for Classification:
+cm_xgb_class <- confusionMatrix(as.factor(testData$xgb_class_pred), as.factor(testData$Hit))
+acc_xgb_class <- cm_xgb_class$overall['Accuracy']
+
+classification_results <- data.frame(
+  Model = c("Logistic Regression", "LDA", "QDA", "KNN", "GAM Classification", 
+            "Decision Tree", "Bagging", "Random Forest", "XGBoost"),
+  Accuracy = c(acc_glm, acc_lda, acc_qda, acc_knn, acc_gam_class, 
+               acc_tree_class, acc_bagging_class, acc_rf_class, acc_xgb_class)
+)
+
+# Order the results by Accuracy (descending: higher is better)
+classification_results <- classification_results[order(-classification_results$Accuracy), ]
+print("Classification Models Performance (sorted by Accuracy):")
+print(classification_results)
+
+```
+
+
+

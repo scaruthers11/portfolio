@@ -1,0 +1,211 @@
+---
+title: "WhiffNewData"
+output: html_document
+---
+
+```{r}
+library(xgboost)
+library(readr)
+library(dplyr)
+library(tidyr)
+library(caret)
+library(pROC)
+```
+
+
+```{r}
+library(arrow)
+df <- read_csv_arrow("AIdata.csv")
+```
+
+```{r}
+# Load dplyr for easy data manipulation
+library(dplyr)
+
+# Keep only the desired PitchCall values
+df <- df %>%
+  filter(PitchCall %in% c("StrikeSwinging", "InPlay", "FoulBall"))
+
+# Check unique values to confirm modification
+df <- df %>%
+  mutate(SwingingStrike = ifelse(PitchCall == "StrikeSwinging", 1, 0))
+```
+
+
+
+```{r}
+#make numeric 
+
+df$SpinRate <- as.numeric(df$SpinRate)
+df$EffectiveVelo <- as.numeric(df$EffectiveVelo)
+df$InducedVertBreak <- as.numeric(df$InducedVertBreak)
+df$HorzBreak <- as.numeric(df$HorzBreak)
+df$RelHeight <- as.numeric(df$RelHeight)
+
+```
+
+
+```{r}
+#-----------------------------
+# 2) Define subsets to train
+#-----------------------------
+pitch_types <- c("Fastball", "Changeup", "Curveball")
+handedness  <- c("Left", "Right")
+
+# We'll store results in a data frame for easy reference:
+results_df <- data.frame(
+  PitchType   = character(),
+  Handedness  = character(),
+  N_Records   = numeric(),
+  Accuracy    = numeric(),
+  AUC         = numeric(),
+  stringsAsFactors = FALSE
+)
+
+# Also store the trained models in a list for potential reuse
+trained_models <- list()
+
+```
+# NAH THIS BEST 
+```{r}
+# Initialize storage for confusion matrices
+conf_matrices <- list()
+
+#-----------------------------
+# 3) Loop over each subset
+#-----------------------------
+set.seed(123) # for reproducibility of splits
+
+for (pt in pitch_types) {
+  for (hand in handedness) {
+    
+    # 3.1. Filter data for this pitch type + handedness
+    subset_data <- df %>%
+      filter(TaggedPitchType == pt, PitcherThrows == hand) %>%
+      select(SpinRate, EffectiveVelo, InducedVertBreak,
+             HorzBreak, RelHeight, SwingingStrike) %>%
+      drop_na()
+    subset_data <- as.data.frame(subset_data)
+    # If there's insufficient data, skip
+    if (nrow(subset_data) < 50) {
+      message(paste("Skipping", pt, "-", hand, 
+                    "because only", nrow(subset_data), "records found."))
+      next
+    }
+    
+    # 3.2. Train/Test Split
+    train_index <- sample(seq_len(nrow(subset_data)), size = 0.8 * nrow(subset_data))
+    
+    train_data <- subset_data[train_index, ]
+    test_data  <- subset_data[-train_index, ]
+    
+    # Separate features and labels
+    
+    train_x <- as.matrix(train_data %>% select(SpinRate, EffectiveVelo, InducedVertBreak, HorzBreak, RelHeight))
+    train_y <- train_data$SwingingStrike
+    
+    test_x  <- as.matrix(test_data %>% select(SpinRate, EffectiveVelo, InducedVertBreak, HorzBreak, RelHeight))
+    test_y  <- test_data$SwingingStrike
+    
+    # Fix y to ensure binary format
+    test_y <- as.numeric(as.character(test_y))  
+    test_y <- ifelse(test_y == 12, 1, test_y) 
+    
+    # 3.3. Build XGBoost DMatrix
+    dtrain <- xgb.DMatrix(data = train_x, label = train_y)
+    dtest  <- xgb.DMatrix(data = test_x, label = test_y)
+    
+    # 3.4. Set XGBoost Parameters
+    params <- list(
+      booster           = "gbtree",
+      objective         = "binary:logistic",
+      eval_metric       = "logloss",
+      eta               = 0.1,
+      max_depth         = 6,
+      subsample         = 0.8,
+      colsample_bytree  = 0.9,  # Increase feature sampling
+      min_child_weight  = 3,    # Helps prevent overfitting
+      gamma             = 1.5   # Adds regularization for tree splits
+    )
+    
+    # 3.5. Train XGBoost Model
+    xgb_model <- xgb.train(
+      params               = params,
+      data                 = dtrain,
+      nrounds             = 150,  # Increase training rounds
+      watchlist           = list(train = dtrain, eval = dtest),
+      early_stopping_rounds = 15,  # Allow early stopping for better generalization
+      print_every_n       = 10
+    )
+    
+    
+    # 3.6. Evaluate Model
+    # Predict probability of Swinging Strike
+    pred_probs <- predict(xgb_model, newdata = dtest)
+    # Convert probability to 0/1
+    pred_class <- ifelse(pred_probs > 0.5, 1, 0)
+    
+    # Confusion matrix
+    conf_matrix <- table(Predicted = pred_class, Actual = test_y)
+    
+    # Store the confusion matrix
+    conf_matrices[[paste(pt, hand, sep = "_")]] <- conf_matrix
+    
+    # Print confusion matrix
+    message(paste("Confusion Matrix for", pt, "+", hand))
+    print(conf_matrix)
+    
+    # Confusion matrix stats
+    accuracy <- mean(pred_class == test_y)
+    
+    # Check class distribution
+    print(table(test_y))  
+    
+    # Compute AUC only if both classes exist
+    if (length(unique(test_y)) > 1) {
+      roc_obj <- roc(test_y, pred_probs)
+      auc_val <- auc(roc_obj)
+    } else {
+      auc_val <- NA  # Assign NA since AUC is undefined
+      message(sprintf("Skipping AUC for %s + %s due to single class in test set.", pt, hand))
+    }
+    
+    # 3.7. Store Results
+    results_df <- rbind(results_df, data.frame(
+      PitchType   = pt,
+      Handedness  = hand,
+      N_Records   = nrow(subset_data),
+      Accuracy    = accuracy,
+      AUC         = auc_val
+    ))
+    
+    # Also store the trained model in a list (optional)
+    model_key <- paste(pt, hand, sep = "_")
+    trained_models[[model_key]] <- xgb_model
+    
+    message(sprintf("Trained model: %s + %s | n=%d | Accuracy=%.3f | AUC=%.3f",
+                    pt, hand, nrow(subset_data), accuracy, auc_val))
+  }
+}
+
+#-----------------------------
+# 4) Review Final Results
+#-----------------------------
+print(results_df)
+
+#-----------------------------
+# 5) Print All Confusion Matrices
+#-----------------------------
+for (key in names(conf_matrices)) {
+  message(paste("\nConfusion Matrix for", key))
+  print(conf_matrices[[key]])
+}
+
+```
+
+
+```{r}
+str(train_x)
+
+```
+
