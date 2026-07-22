@@ -1,106 +1,176 @@
 <!DOCTYPE html>
 <html lang="en">
 <head>
-  <meta charset="utf-8" />
-  <meta name="viewport" content="width=device-width, initial-scale=1" />
-  <title>Sam Caruthers • Portfolio</title>
-  <style>
-    :root { --fg:#0f172a; --muted:#475569; --link:#2563eb; --card:#f8fafc; }
-    *{box-sizing:border-box}
-    body{margin:0; font-family:system-ui,-apple-system,Segoe UI,Roboto,Inter,Arial,sans-serif; color:var(--fg); background:#fff}
-    header{padding:40px 20px; text-align:center; border-bottom:1px solid #e2e8f0}
-    header h1{margin:0 0 6px 0; font-size:2rem}
-    header p{margin:0; color:var(--muted)}
-    main{max-width:960px; margin:0 auto; padding:24px 16px 56px}
-    .grid{display:grid; grid-template-columns:repeat(auto-fill,minmax(260px,1fr)); gap:14px}
-    .card{background:var(--card); border:1px solid #e2e8f0; border-radius:14px; padding:14px}
-    .card h3{margin:0 0 8px 0; font-size:1rem}
-    .card p{margin:0 0 10px 0; color:var(--muted); font-size:.9rem}
-    a{color:var(--link); text-decoration:none}
-    a:hover{text-decoration:underline}
-    .thumb{width:100%; height:150px; object-fit:cover; border-radius:10px; border:1px solid #e2e8f0; background:#fff}
-    details{background:#f1f5f9; border:1px solid #e2e8f0; border-radius:12px; padding:12px; margin:18px 0}
-    details > summary{cursor:pointer; font-weight:600}
-    .row{display:flex; flex-wrap:wrap; gap:8px}
-    .btn{display:inline-block; padding:8px 10px; border:1px solid #cbd5e1; border-radius:10px; background:#fff}
-    footer{max-width:960px; margin:0 auto 40px; color:var(--muted); font-size:.9rem; padding:0 16px}
-    iframe{width:100%; height:420px; border:0; border-radius:12px}
-  </style>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+
+  <title>Samuel Caruthers | Writer & Director</title>
+
+  <meta
+    name="description"
+    content="The official portfolio of Samuel Caruthers, a Los Angeles-based writer and director."
+  >
+
+  <link rel="stylesheet" href="styles.css">
 </head>
+
 <body>
-  <header>
-    <h1>Sam Caruthers — Portfolio</h1>
-    <p>Data Science projects in Python and R</p>
+  <header class="site-header">
+    <a class="logo" href="#home">Samuel Caruthers</a>
+
+    <nav aria-label="Main navigation">
+      <a href="#films">Films</a>
+      <a href="#about">About</a>
+      <a href="#resume">Résumé</a>
+      <a href="#contact">Contact</a>
+    </nav>
   </header>
 
   <main>
-    <!-- ===== Featured PDFs (inline preview) ===== -->
-    <h2>Featured PDFs</h2>
-    <div class="grid">
-      <div class="card">
-        <h3>Baseball Project (No Code)</h3>
-        <p>Overview PDF</p>
-        <div class="row">
-          <a class="btn" href="./BaseballProjectNoCode.pdf" target="_blank">Open PDF</a>
-          <a class="btn" href="./BaseballProjectNoCode.pdf" download>Download</a>
+    <section class="hero" id="home">
+      <div class="hero-overlay"></div>
+
+      <div class="hero-content">
+        <p class="eyebrow">Writer · Director · Los Angeles</p>
+        <h1>Samuel<br>Caruthers</h1>
+
+        <p class="hero-copy">
+          Character-driven stories about technology, ambition,
+          identity, and human connection.
+        </p>
+
+        <div class="hero-actions">
+          <a class="button button-light" href="#films">View Films</a>
+          <a class="button button-outline" href="#contact">Contact</a>
         </div>
       </div>
-      <div class="card">
-        <h3>DRP Poster</h3>
-        <p>Poster PDF</p>
-        <div class="row">
-          <a class="btn" href="./DRP_Poster.pdf" target="_blank">Open PDF</a>
-          <a class="btn" href="./DRP_Poster.pdf" download>Download</a>
+    </section>
+
+    <section class="section films-section" id="films">
+      <div class="section-heading">
+        <p class="eyebrow">Selected work</p>
+        <h2>Films</h2>
+      </div>
+
+      <div class="film-grid">
+        <article class="film-card">
+          <div class="film-image film-image-one">
+            <span>Film still coming soon</span>
+          </div>
+
+          <div class="film-info">
+            <p class="film-year">Short Film</p>
+            <h3>The Analog Man</h3>
+            <p>
+              A workplace story about automation, artificial intelligence,
+              and one man’s struggle to remain useful.
+            </p>
+            <p class="film-credit">
+              Premiered at the Golden State Film Festival at the TCL Chinese Theatre.
+            </p>
+          </div>
+        </article>
+
+        <article class="film-card">
+          <div class="film-image film-image-two">
+            <span>Film still coming soon</span>
+          </div>
+
+          <div class="film-info">
+            <p class="film-year">Short Film</p>
+            <h3>The Perfectionist and the Playboy</h3>
+            <p>
+              A romantic character piece developed through the Santa Barbara
+              International Film Festival’s 10-10-10 program.
+            </p>
+            <p class="film-credit">
+              Premiered through the SBIFF 10-10-10 program.
+            </p>
+          </div>
+        </article>
+
+        <article class="film-card">
+          <div class="film-image film-image-three">
+            <span>Film still coming soon</span>
+          </div>
+
+          <div class="film-info">
+            <p class="film-year">Short Film</p>
+            <h3>In Case I Miss You</h3>
+            <p>
+              A new short film exploring memory, distance, and the fear of
+              losing connection.
+            </p>
+            <p class="film-credit">Written and directed by Samuel Caruthers.</p>
+          </div>
+        </article>
+      </div>
+    </section>
+
+    <section class="section about-section" id="about">
+      <div class="section-heading">
+        <p class="eyebrow">About</p>
+        <h2>Filmmaker with a technical perspective.</h2>
+      </div>
+
+      <div class="about-grid">
+        <div class="about-photo">
+          <span>Portrait coming soon</span>
+        </div>
+
+        <div class="about-copy">
+          <p>
+            Samuel Caruthers is a Los Angeles-based writer and director with
+            degrees in Film & Media Studies and Statistics & Data Science from
+            UC Santa Barbara.
+          </p>
+
+          <p>
+            He has written and directed three short films and has supported
+            feature development, casting, production, and executive operations
+            at INTERDEPENDENT Studio.
+          </p>
+
+          <p>
+            His creative work is informed by an interest in technology,
+            changing workplaces, ambition, relationships, and the ways people
+            search for meaning in rapidly evolving environments.
+          </p>
         </div>
       </div>
-      <div class="card">
-        <h3>PSTAT194CS Annotated Final Project</h3>
-        <p>Annotated report</p>
-        <div class="row">
-          <a class="btn" href="./annotated-PSTAT194CS-Final-Project---Group-5.pdf" target="_blank">Open PDF</a>
-          <a class="btn" href="./annotated-PSTAT194CS-Final-Project---Group-5.pdf" download>Download</a>
-        </div>
+    </section>
+
+    <section class="section resume-section" id="resume">
+      <div>
+        <p class="eyebrow">Experience</p>
+        <h2>Development, production, and executive support.</h2>
       </div>
-      <div class="card">
-        <h3>Other recent projects
-<!-- ===== Image Gallery ===== -->
-<h2>Images</h2>
-<div class="grid" id="imagesGrid">
-  <!-- Example cards; duplicate & change filenames -->
-  <div class="card">
-    <img class="thumb" src="./Candlestickchary.png" alt="Candlestickchary">
-    <h3>Candlestickchary.png</h3>
-    <div class="row">
-      <a class="btn" href="./Candlestickchary.png" target="_blank">Open</a>
-      <a class="btn" href="./Candlestickchary.png" download>Download</a>
-    </div>
-  </div>
 
-  <div class="card">
-    <img class="thumb" src="./UpdatedGraph.png" alt="UpdatedGraph">
-    <h3>UpdatedGraph.png</h3>
-    <div class="row">
-      <a class="btn" href="./UpdatedGraph.png" target="_blank">Open</a>
-      <a class="btn" href="./UpdatedGraph.png" download>Download</a>
-    </div>
-  </div>
-</div>
+      <a class="button button-dark" href="#" aria-label="Download Samuel Caruthers résumé">
+        Download Résumé
+      </a>
+    </section>
 
-<!-- ===== R Markdown (source files) ===== -->
-<h2>R Markdown</h2>
-<ul>
-  <li><a href="./WhiffNewData.Rmd" target="_blank">WhiffNewData.Rmd</a></li>
-  <li><a href="./expectedSlugging.Rmd" target="_blank">expectedSlugging.Rmd</a></li>
-  <li><a href="./frontendAPI.Rmd" target="_blank">frontendAPI.Rmd</a></li>
-  <li><a href="./loaddata.Rmd" target="_blank">loaddata.Rmd</a></li>
-  <li><a href="./loaddatabase.Rmd" target="_blank">loaddatabase.Rmd</a></li>
-</ul>
-<p style="color:#475569">Rmds don’t render on Pages. Knit to HTML locally and commit the generated <code>.html</code> to make them viewable.</p>
+    <section class="section contact-section" id="contact">
+      <p class="eyebrow">Contact</p>
+      <h2>Let’s make something worth watching.</h2>
 
-<!-- ===== Code files ===== -->
-<h2>Code</h2>
-<ul>
-  <li><a href="./NeuralNetwork1_%20beta.py" target="_blank">NeuralNetwork1_ beta.py</a></li>
-  <li><a href="./test_revenue_model.py" target="_blank">test_revenue_model.py</a></li>
-  <li><a href="./Special%20Project-RTF%20SAM.docx" target="_blank">Special Project-RTF SAM.docx</a></li>
-</ul>
+      <div class="contact-links">
+        <a href="mailto:samjc1021@gmail.com">samjc1021@gmail.com</a>
+
+        <a
+          href="https://www.linkedin.com/in/sam-caruthers-link"
+          target="_blank"
+          rel="noopener noreferrer"
+        >
+          LinkedIn
+        </a>
+      </div>
+    </section>
+  </main>
+
+  <footer>
+    <p>© 2026 Samuel Caruthers</p>
+  </footer>
+</body>
+</html>
