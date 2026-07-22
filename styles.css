@@ -213,13 +213,14 @@
     background: #222222;
     color: #888888;
     overflow: hidden;
-    .film-image img,
-    .about-photo img {
-        width: 100%;
-        height: 100%;
-        display: block;
-        object-fit: cover;
-}
+  }
+  
+  .film-image img,
+  .about-photo img {
+    width: 100%;
+    height: 100%;
+    display: block;
+    object-fit: cover;
   }
   
   .film-image-one {
