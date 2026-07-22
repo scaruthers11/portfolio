@@ -80,7 +80,7 @@
             rgba(0, 0, 0, 0.48) 45%,
             rgba(0, 0, 0, 0.18) 100%
         ),
-        url("images/analogManMainstill.png") center center / cover no-repeat;
+        url("images/analogManMainStill.png") center center / cover no-repeat;
   }
   
   .hero-overlay {
@@ -289,6 +289,16 @@
     justify-content: center;
     background: #d2ccc2;
     color: #746f67;
+  }
+  .about-photo img {
+    width: 100%;
+    height: 100%;
+    display: block;
+    object-fit: cover;
+  }
+  
+  .about-copy {
+    min-width: 0;
   }
   
   .about-copy {
